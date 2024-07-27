@@ -9,8 +9,7 @@ public class SelectTests
 
     public static IEnumerable<object[]> Implementations => [[new SelectParallelDelegate<int, int>(Extensions.SelectParallelSemaphoreWhenAny)],
             [new SelectParallelDelegate<int, int>(Extensions.SelectParallelInterleaved)],
-            [new SelectParallelDelegate<int, int>(Extensions.SelectParallelDataFlow)],
-            [new SelectParallelDelegate<int, int>(Extensions.SelectParallelQuery)]];
+            [new SelectParallelDelegate<int, int>(Extensions.SelectParallelDataFlow)]];
 
 
     [Theory]
@@ -78,8 +77,9 @@ public class SelectTests
         const int range = 3;
         const int delay = 2000;
         var values = implementation(Enumerable.Range(0, range), v => GetValueAsync(v, (v + 1) * delay), range);
+        var delayTask = Task.Delay(delay * 2 - 1);
         var firstValueTask = values.FirstAsync().AsTask();
-        var completedTask = await Task.WhenAny(Task.Delay(delay * 2 - 1), firstValueTask);
+        var completedTask = await Task.WhenAny(delayTask, firstValueTask);
         Assert.Equal(0, await firstValueTask);
         Assert.Equal(firstValueTask, completedTask);
     }

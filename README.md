@@ -14,6 +14,8 @@ One day at work, I needed to run an async `Task` against an `IEnumerable` of inp
 4. **Utilization of Max Degree of Parallelism** - At some point, exactly `N` items should be making progress. This ensures the implementation is efficient, especially compared to single-threaded versions.
 5. **First Result Returned as Soon as Ready** - The first result should be returned as soon as it is ready, verified by unit tests with delayed tasks. This ensures efficiency over naive `Task.WhenAll` implementations.
 
+Rules are enforced via a unit test project which utilizies .NET parallelization and synchronization mechanism to emulate scenarios and monitor behaviour of the implementations. Of great use was the `Interlocked` class providing atomic `Increment` and `Decrement` methods.
+
 ## Implementations
 
 ### SelectParallelSemaphoreWhenAny
@@ -26,7 +28,7 @@ Implementation based on Stephen Toub’s blog post from 2012. [Link](https://dev
 Utilizes the `TransformBlock` from Dataflow API introduced in .NET 6.0. [Learn more](https://learn.microsoft.com/en-us/dotnet/standard/parallel-programming/dataflow-task-parallel-library) It is a modern and efficient solution which guarantees the order of production of the outputs. In the unit tests the implementation performed by best.
 
 ### SelectParallelQuery
-Uses PLINQ with blocking `Select` to ensure `WithDegreeOfParallelism` is effective. Blocking version is used as in async version the rule 2 is not satisfied as explained [here](https://devblogs.microsoft.com/pfxteam/paralleloptions-maxdegreeofparallelism-vs-plinqs-withdegreeofparallelism/). The fakeness of the IAsyncEnumerable becomes apparent in the test `FastFirstResultTest` which verifies only the first ready result - a task with 2 seconds delay, while the PLINQ query processes all the tasks, taking the time of the longest task (6 seconds) to complete.
+Uses PLINQ with blocking `Select` to ensure `WithDegreeOfParallelism` is effective. Blocking version is used as in async version the rule 2 is not satisfied as explained [here](https://devblogs.microsoft.com/pfxteam/paralleloptions-maxdegreeofparallelism-vs-plinqs-withdegreeofparallelism/). The blocking version fails rule 5, but otherwise it is the simplest way implementation-wise to enforce a degree of parallelism at the expense of async.
 
 ### SelectParallelForEach
 A bonus straightforward implementation for cases where capturing the result is not necessary, only ensuring the max degree of parallelism.

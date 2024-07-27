@@ -92,6 +92,7 @@ public static class Extensions
         }
     }
 
+    //Does not return intermediate results
     public static async IAsyncEnumerable<R> SelectParallelQuery<T, R>(this IEnumerable<T> source, Func<T, Task<R>> body, int degreeOfParallelism)
     {
         foreach (var result in source.AsParallel().WithDegreeOfParallelism(degreeOfParallelism).Select(item => body(item).GetAwaiter().GetResult()))
