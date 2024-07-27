@@ -1,9 +1,10 @@
-﻿using System.Threading.Tasks;
-using System.Threading.Tasks.Dataflow;
+﻿using System.Threading.Tasks.Dataflow;
+using System.Linq;
+using System.Collections.Generic;
 
 namespace SelectParallel;
 
-public delegate IAsyncEnumerable<R> SelectParallelDelegate<T, R>(IReadOnlyList<T> source, Func<T, Task<R>> body, int maxDegreeOfParallelism);
+public delegate IAsyncEnumerable<R> SelectParallelDelegate<T, R>(IEnumerable<T> source, Func<T, Task<R>> body, int maxDegreeOfParallelism);
 
 public static class Extensions
 {
@@ -30,9 +31,10 @@ public static class Extensions
         }
     }
 
-    public static async IAsyncEnumerable<R> SelectParallelInterleaved<T, R>(this IReadOnlyList<T> source, Func<T, Task<R>> body, int maxDegreeOfParallelism)
+    public static async IAsyncEnumerable<R> SelectParallelInterleaved<T, R>(this IEnumerable<T> source, Func<T, Task<R>> body, int maxDegreeOfParallelism)
     {
-        var buckets = new TaskCompletionSource<R>[source.Count];
+        var sourceArray = source.ToList();
+        var buckets = new TaskCompletionSource<R>[sourceArray.Count];
         var results = new Task<R>[buckets.Length];
         for (var i = 0; i < buckets.Length; i++)
         {
@@ -45,8 +47,8 @@ public static class Extensions
 
         void Trigger(int index)
         {
-            if (index < source.Count)
-                _ = body(source[index]).ContinueWith(completed =>
+            if (index < sourceArray.Count)
+                _ = body(sourceArray[index]).ContinueWith(completed =>
                 {
                     var bucket = buckets[Interlocked.Increment(ref readyTaskIndex)];
                     if (completed.IsCompleted)
@@ -58,7 +60,7 @@ public static class Extensions
                 }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
         }
 
-        for (var i = 0; i < Math.Min(maxDegreeOfParallelism, source.Count); i++)
+        for (var i = 0; i < Math.Min(maxDegreeOfParallelism, sourceArray.Count); i++)
             Trigger(i);
 
         foreach (var result in results)
@@ -66,19 +68,6 @@ public static class Extensions
             yield return await result;
             Trigger(Interlocked.Increment(ref toLaunchTaskIndex));
         }
-    }
-
-    //Does not respect maxDegreeOfParallelism
-    public static async IAsyncEnumerable<R> SelectParallelQuery<T, R>(this IEnumerable<T> source, Func<T, Task<R>> body, int maxDegreeOfParallelism)
-    {
-        foreach (var result in source.AsParallel().WithDegreeOfParallelism(maxDegreeOfParallelism).Select(async item => await body(item)))
-            yield return await result;
-    }
-
-    //Does not return result
-    public static Task SelectParallel<T>(this IEnumerable<T> source, Func<T, Task> body, int maxDegreeOfParallelism)
-    {
-        return Parallel.ForEachAsync(source, new ParallelOptions { MaxDegreeOfParallelism = maxDegreeOfParallelism }, async (item, _) => await body(item));
     }
 
     public static async IAsyncEnumerable<R> SelectParallelDataFlow<T, R>(this IEnumerable<T> source, Func<T, Task<R>> body, int maxDegreeOfParallelism)
@@ -101,6 +90,17 @@ public static class Extensions
                 yield return result;
             }
         }
-        await transformBlock.Completion;
+    }
+
+    public static async IAsyncEnumerable<R> SelectParallelQuery<T, R>(this IEnumerable<T> source, Func<T, Task<R>> body, int degreeOfParallelism)
+    {
+        foreach (var result in source.AsParallel().WithDegreeOfParallelism(degreeOfParallelism).Select(item => body(item).GetAwaiter().GetResult()))
+            yield return result;
+    }
+
+    //Does not return result
+    public static Task SelectParallelForEach<T>(this IEnumerable<T> source, Func<T, Task> body, int maxDegreeOfParallelism)
+    {
+        return Parallel.ForEachAsync(source, new ParallelOptions { MaxDegreeOfParallelism = maxDegreeOfParallelism }, async (item, _) => await body(item));
     }
 }

@@ -9,7 +9,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\SelectParallel\SelectParallel.csproj" />
-    <PackageReference Include="System.Linq.Async" Version="6.0.1" />
   </ItemGroup>
 
 </Project>
